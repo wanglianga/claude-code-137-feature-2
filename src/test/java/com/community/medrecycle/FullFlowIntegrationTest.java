@@ -89,7 +89,7 @@ class FullFlowIntegrationTest {
         assertEquals(BatchStatus.STORED, batchService.get(batch.getBatchNo()).getStatus());
 
         // 6. 发起环保交接：重量不足上门量，force 强制；含高风险袋 -> 需要双人交接
-        HandoverOrder order = handoverService.create(site.getId(), "绿源环保科技", "市危废处理中心", bagNos, true);
+        HandoverOrder order = handoverService.create(site.getId(), "绿源环保科技", "市危废处理中心", bagNos, null, true);
         assertTrue(order.isRequiresDual());
         assertEquals(HandoverStatus.DRAFT, order.getStatus());
 
@@ -101,7 +101,7 @@ class FullFlowIntegrationTest {
 
         // 7. 环保公司签收完成
         HandoverOrder completed = handoverService.complete(order.getOrderNo(), "绿源-张司机",
-                "photo://handover1", null);
+                "photo://handover1", null, null);
         assertEquals(HandoverStatus.COMPLETED, completed.getStatus());
         assertEquals("绿源-张司机", completed.getReceiverName());
 

@@ -83,8 +83,9 @@ public class ExceptionService {
                     sendBackToReview(batch, bag, record.getType().name());
                 }
             }
-            case WEIGHT_DISPUTE, EXCHANGE_FAILED, COMPANY_REJECT -> {
-                // 称重争议走 reweigh 解决；兑换失败/公司拒收仅记录跟踪
+            case WEIGHT_DISPUTE, EXCHANGE_FAILED, COMPANY_REJECT, SHARPS_PACKAGING_DAMAGED -> {
+                // 称重争议走 reweigh 解决；兑换失败/公司拒收/锐器包装破损仅记录跟踪
+                // （锐器破损由回收点走重新封装流程，袋状态不回退）
             }
         }
     }

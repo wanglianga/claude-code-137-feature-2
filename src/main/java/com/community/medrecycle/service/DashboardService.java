@@ -5,6 +5,7 @@ import com.community.medrecycle.domain.*;
 import com.community.medrecycle.domain.enums.BagStatus;
 import com.community.medrecycle.domain.enums.ExceptionStatus;
 import com.community.medrecycle.domain.enums.ReviewStatus;
+import com.community.medrecycle.domain.enums.SharpsStatus;
 import com.community.medrecycle.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,8 @@ public class DashboardService {
     private final DrugBagRepository bagRepository;
     private final ReviewTaskRepository reviewTaskRepository;
     private final ExceptionRecordRepository exceptionRepository;
+    private final SharpsContainerRepository sharpsContainerRepository;
+    private final SharpsNotificationRepository sharpsNotificationRepository;
     private final StorageService storageService;
 
     @Transactional(readOnly = true)
@@ -41,6 +44,14 @@ public class DashboardService {
         List<DrugBag> storedBags = bagRepository.findBySiteIdAndStatus(siteId, BagStatus.STORED);
         double readyWeight = storedBags.stream().mapToDouble(DrugBag::getWeightKg).sum();
         boolean anyHighRisk = storedBags.stream().anyMatch(DrugBag::isHighRisk);
+        // 已封盒待清运的锐器盒（破损待重新封装的不计入可交接）
+        List<SharpsContainer> sealedContainers = sharpsContainerRepository
+                .findBySiteIdAndStatus(siteId, SharpsStatus.SEALED).stream()
+                .filter(c -> !c.isPackagingDamaged() && c.getAssignedOrderId() == null)
+                .toList();
+        double sealedSharpsWeight = sealedContainers.stream()
+                .mapToDouble(SharpsContainer::getUsedWeightKg).sum();
+        double totalReadyWeight = readyWeight + sealedSharpsWeight;
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("site", site);
@@ -59,15 +70,56 @@ public class DashboardService {
         result.put("pickup", Map.of(
                 "storedBags", storedBags.size(),
                 "storedWeightKg", readyWeight,
+                "sealedSharpsContainers", sealedContainers.size(),
+                "sealedSharpsWeightKg", sealedSharpsWeight,
+                "totalReadyWeightKg", totalReadyWeight,
                 "pickupThresholdKg", site.getPickupThresholdKg(),
-                "thresholdReached", readyWeight >= site.getPickupThresholdKg()));
+                "thresholdReached", totalReadyWeight >= site.getPickupThresholdKg()));
         result.put("handover", Map.of(
-                "requiresDualIfHandoverNow", anyHighRisk || readyWeight >= site.getDualWeightThresholdKg(),
+                "requiresDualIfHandoverNow",
+                anyHighRisk || !sealedContainers.isEmpty()
+                        || totalReadyWeight >= site.getDualWeightThresholdKg(),
                 "dualWeightThresholdKg", site.getDualWeightThresholdKg(),
-                "containsHighRisk", anyHighRisk));
+                "containsHighRisk", anyHighRisk,
+                "containsSealedSharps", !sealedContainers.isEmpty()));
         result.put("pendingReviews", reviewTaskRepository.findByStatusOrderByCreatedAtAsc(ReviewStatus.PENDING).size());
         result.put("openExceptions", exceptionRepository.countByStatus(ExceptionStatus.OPEN)
                 + exceptionRepository.countByStatus(ExceptionStatus.PROCESSING));
+
+        // 针剂安全封装：使用中锐器盒容量预警、已封盒待清运、包装破损待重新封装
+        List<SharpsContainer> siteContainers = sharpsContainerRepository.findBySiteIdOrderByCreatedAtDesc(siteId);
+        List<Map<String, Object>> sharpsViews = new ArrayList<>();
+        int inUseCount = 0, sealedCount = 0, damagedCount = 0, fullCount = 0, nearFullCount = 0;
+        for (SharpsContainer c : siteContainers) {
+            String level = SharpsService.warningLevel(c);
+            Map<String, Object> v = new LinkedHashMap<>();
+            v.put("container", c);
+            v.put("usageRatio", SharpsService.usageRatio(c));
+            v.put("warning", level);
+            sharpsViews.add(v);
+            if (c.getStatus() == SharpsStatus.IN_USE) {
+                inUseCount++;
+                if ("FULL".equals(level)) {
+                    fullCount++;
+                } else if ("WARN".equals(level)) {
+                    nearFullCount++;
+                }
+            }
+            if (c.getStatus() == SharpsStatus.SEALED) {
+                sealedCount++;
+            }
+            if (c.isPackagingDamaged()) {
+                damagedCount++;
+            }
+        }
+        result.put("sharps", Map.of(
+                "containers", sharpsViews,
+                "inUse", inUseCount,
+                "sealedReadyForPickup", sealedCount,
+                "nearFull", nearFullCount,
+                "full", fullCount,
+                "packagingDamaged", damagedCount,
+                "notifications", sharpsNotificationRepository.findBySiteIdOrderByCreatedAtDesc(siteId)));
         return result;
     }
 }

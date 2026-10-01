@@ -23,15 +23,16 @@ public class HandoverController {
     private final HandoverService handoverService;
 
     public record CreateRequest(@NotNull Long siteId, @NotBlank String companyName,
-                                @NotBlank String destination, List<String> bagNos, boolean force) {
+                                @NotBlank String destination, List<String> bagNos,
+                                List<String> sharpsContainerNos, boolean force) {
     }
 
-    /** 管理员发起环保交接（默认取站点全部暂存袋，校验上门量） */
+    /** 管理员发起环保交接（默认取站点全部暂存袋+已封盒锐器盒，校验上门量） */
     @PostMapping
     public HandoverOrder create(@Validated @RequestBody CreateRequest request) {
         AuthContext.requireRole(Role.ADMIN);
         return handoverService.create(request.siteId(), request.companyName(),
-                request.destination(), request.bagNos(), request.force());
+                request.destination(), request.bagNos(), request.sharpsContainerNos(), request.force());
     }
 
     /** 交出方签收（双人交接时需两人各签一次） */
@@ -44,11 +45,17 @@ public class HandoverController {
     public record ItemResultRequest(@NotBlank String bagNo, boolean accepted, String rejectReason) {
     }
 
-    public record CompleteRequest(@NotBlank String receiverName, String photoUrls,
-                                  @Valid List<ItemResultRequest> items) {
+    public record ContainerResultRequest(@NotBlank String containerNo, boolean accepted,
+                                         Integer receivedSharpsCount, Double receivedWeightKg,
+                                         boolean packagingDamaged, String rejectReason) {
     }
 
-    /** 环保公司签收完成：逐袋确认，拒收自动生成异常 */
+    public record CompleteRequest(@NotBlank String receiverName, String photoUrls,
+                                  @Valid List<ItemResultRequest> items,
+                                  @Valid List<ContainerResultRequest> sharpsContainers) {
+    }
+
+    /** 环保公司签收完成：逐袋确认、锐器盒按数量/重量逐盒确认，拒收/破损自动生成异常 */
     @PostMapping("/{orderNo}/complete")
     public HandoverOrder complete(@PathVariable String orderNo,
                                   @Validated @RequestBody CompleteRequest request) {
@@ -57,7 +64,12 @@ public class HandoverController {
                 : request.items().stream()
                 .map(i -> new HandoverService.ItemResult(i.bagNo(), i.accepted(), i.rejectReason()))
                 .toList();
-        return handoverService.complete(orderNo, request.receiverName(), request.photoUrls(), items);
+        List<HandoverService.ContainerResult> containers = request.sharpsContainers() == null ? List.of()
+                : request.sharpsContainers().stream()
+                .map(c -> new HandoverService.ContainerResult(c.containerNo(), c.accepted(),
+                        c.receivedSharpsCount(), c.receivedWeightKg(), c.packagingDamaged(), c.rejectReason()))
+                .toList();
+        return handoverService.complete(orderNo, request.receiverName(), request.photoUrls(), items, containers);
     }
 
     /** 交接单详情：去向、重量、照片、签收人、积分发放结果 */

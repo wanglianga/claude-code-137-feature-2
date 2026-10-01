@@ -3,6 +3,7 @@ package com.community.medrecycle.service;
 import com.community.medrecycle.config.BizException;
 import com.community.medrecycle.domain.*;
 import com.community.medrecycle.domain.enums.BagStatus;
+import com.community.medrecycle.domain.enums.DrugCategory;
 import com.community.medrecycle.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,11 @@ public class StorageService {
         for (String bagNo : bagNos) {
             DrugBag bag = bagRepository.findByBagNo(bagNo)
                     .orElseThrow(() -> BizException.notFound("封袋不存在: " + bagNo));
+            if (bag.getCategory() == DrugCategory.SYRINGE) {
+                // 针剂安全封装复核：未封装/已封装针剂均不得进入普通暂存柜，必须转入锐器盒
+                throw BizException.conflict("针剂封袋 " + bagNo
+                        + " 不得进入普通暂存柜：请完成封装复核后通过 /api/sharps/deposit 转入锐器盒");
+            }
             if (bag.getStatus() != BagStatus.ACCEPTED) {
                 throw BizException.conflict("封袋 " + bagNo + " 状态不可入柜: " + bag.getStatus()
                         + "（高风险袋需先复核通过）");

@@ -25,6 +25,7 @@ public class DataSeeder implements ApplicationRunner {
     private final GiftRepository giftRepository;
     private final ActivityDayRepository activityDayRepository;
     private final PointsAccountRepository pointsAccountRepository;
+    private final SharpsContainerRepository sharpsContainerRepository;
 
     @Value("${app.seed-demo-data:true}")
     private boolean seedDemoData;
@@ -44,6 +45,10 @@ public class DataSeeder implements ApplicationRunner {
         cabinet(site1.getId(), "阳光-A 综合柜", 100, 80);
         cabinet(site1.getId(), "阳光-B 高危专柜", 40, 30);
         cabinet(site2.getId(), "河畔-A 综合柜", 60, 50);
+
+        // 锐器盒（胰岛素针头/注射器专用防刺容器，针剂不得入普通暂存柜）
+        sharpsBox(site1.getId(), "阳光-锐器盒 1 号", 200, 20, 0.8);
+        sharpsBox(site2.getId(), "河畔-锐器盒 1 号", 100, 10, 0.8);
 
         // 积分规则（每公斤积分；精神类/注射器为高风险需人工复核）
         rule(DrugCategory.TABLET, 10, false, "普通片剂/胶囊");
@@ -100,6 +105,17 @@ public class DataSeeder implements ApplicationRunner {
         cabinet.setCapacityBags(capacityBags);
         cabinet.setCapacityWeightKg(capacityWeightKg);
         cabinetRepository.save(cabinet);
+    }
+
+    private void sharpsBox(Long siteId, String name, int capacitySharps, double capacityWeightKg, double warnRatio) {
+        SharpsContainer box = new SharpsContainer();
+        box.setContainerNo(NoGen.next("SC"));
+        box.setSiteId(siteId);
+        box.setName(name);
+        box.setCapacitySharps(capacitySharps);
+        box.setCapacityWeightKg(capacityWeightKg);
+        box.setWarnRatio(warnRatio);
+        sharpsContainerRepository.save(box);
     }
 
     private void rule(DrugCategory category, int pointsPerKg, boolean highRisk, String description) {

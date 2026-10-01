@@ -25,7 +25,8 @@ import java.util.Set;
 public class BatchRefresher {
 
     private static final Set<BagStatus> ACCEPTED_FLOW = EnumSet.of(
-            BagStatus.ACCEPTED, BagStatus.STORED, BagStatus.HANDOVER_ASSIGNED, BagStatus.HANDED_OVER);
+            BagStatus.ACCEPTED, BagStatus.IN_SHARPS_BOX, BagStatus.STORED,
+            BagStatus.HANDOVER_ASSIGNED, BagStatus.HANDED_OVER);
 
     private final RecycleBatchRepository batchRepository;
     private final DrugBagRepository bagRepository;
@@ -61,7 +62,9 @@ public class BatchRefresher {
             } else if (accepted.stream().anyMatch(b -> b.getStatus() == BagStatus.HANDED_OVER
                     || b.getStatus() == BagStatus.HANDOVER_ASSIGNED)) {
                 batch.setStatus(BatchStatus.PARTIALLY_HANDED_OVER);
-            } else if (accepted.stream().allMatch(b -> b.getStatus() == BagStatus.STORED)) {
+            } else if (accepted.stream().allMatch(b -> b.getStatus() == BagStatus.STORED
+                    || b.getStatus() == BagStatus.IN_SHARPS_BOX)) {
+                // 普通袋入暂存柜、针剂入锐器盒，均已安全暂存
                 batch.setStatus(BatchStatus.STORED);
             } else {
                 batch.setStatus(BatchStatus.POINTS_GRANTED);

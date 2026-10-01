@@ -113,11 +113,12 @@ class ExceptionFlowIntegrationTest {
         storageService.putBags(cabinet.getId(), List.of(bag.getBagNo()));
 
         HandoverOrder order = handoverService.create(siteId, "绿源环保科技", "市危废处理中心",
-                List.of(bag.getBagNo()), true);
+                List.of(bag.getBagNo()), null, true);
         handoverService.sign(recycler.getId(), order.getOrderNo());
         // 环保公司拒收外用药袋
         HandoverOrder completed = handoverService.complete(order.getOrderNo(), "绿源-张司机", null,
-                List.of(new HandoverService.ItemResult(bag.getBagNo(), false, "外用药含管状包装不在接收范围")));
+                List.of(new HandoverService.ItemResult(bag.getBagNo(), false, "外用药含管状包装不在接收范围")),
+                null);
 
         assertEquals(HandoverStatus.PARTIAL_REJECTED, completed.getStatus());
         // 袋退回暂存，异常已记录

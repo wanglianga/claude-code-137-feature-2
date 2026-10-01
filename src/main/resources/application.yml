@@ -21,6 +21,14 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
 app:
   # 首次启动时写入演示数据（站点/暂存柜/积分规则/礼品/测试账号/活动日）
   seed-demo-data: ${SEED_DEMO_DATA:true}
