@@ -22,7 +22,7 @@ public class HandoverItem {
     @Column(nullable = false)
     private Long orderId;
 
-    @Column(nullable = false)
+    /** 普通药品封袋；锐器盒整盒交接明细为空 */
     private Long bagId;
 
     @Column(nullable = false, length = 32)
@@ -34,6 +34,28 @@ public class HandoverItem {
 
     @Column(nullable = false)
     private double weightKg;
+
+    /** 针剂特殊交接：该明细关联的锐器盒；普通袋为空 */
+    private Long sharpContainerId;
+
+    @Column(length = 32)
+    private String sharpContainerNo;
+
+    /** 针剂特殊交接：封箱登记的锐器数量（支），环保公司按此数量与重量签收 */
+    private Integer sharpItemCount;
+
+    /** 环保公司实收锐器数量（支） */
+    private Integer receivedItems;
+
+    /** 环保公司实收重量（kg），普通袋与袋重一致；针剂为整盒实收重量 */
+    private Double receivedWeightKg;
+
+    /** 签收时确认包装是否破损；破损需补充事故记录并重新封装 */
+    @Column(nullable = false)
+    private boolean packageDamaged = false;
+
+    @Column(length = 256)
+    private String damageNote;
 
     /** 环保公司是否签收，null 表示未确认 */
     private Boolean accepted;

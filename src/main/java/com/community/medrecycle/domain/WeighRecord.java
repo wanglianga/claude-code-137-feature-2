@@ -21,6 +21,9 @@ public class WeighRecord {
     @Column(nullable = false)
     private Long batchId;
 
+    /** 对应封袋，封装确认随针剂袋转入锐器盒时可追溯 */
+    private Long bagId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private DrugCategory category;
@@ -35,6 +38,18 @@ public class WeighRecord {
     /** 是否存在称重争议 */
     @Column(nullable = false)
     private boolean dispute = false;
+
+    /** 针剂封装箱核：是否使用防刺容器（居民提交胰岛素针头/注射器时回收员确认） */
+    @Column(nullable = false)
+    private boolean punctureProofContainer = false;
+
+    /** 针剂封装箱核：是否混入普通药袋 */
+    @Column(nullable = false)
+    private boolean mixedWithRegularBag = false;
+
+    /** 针剂封装箱核：锐器数量（支） */
+    @Column(nullable = false)
+    private int sharpItemCount = 0;
 
     @Column(nullable = false)
     private Long weighedBy;

@@ -38,6 +38,14 @@ public class HandoverOrder {
     @Column(nullable = false)
     private int bagCount = 0;
 
+    /** 随单交接的锐器盒数量（针剂特殊封装，按锐器数量与重量签收） */
+    @Column(nullable = false)
+    private int sharpContainerCount = 0;
+
+    /** 随单锐器盒内锐器总数（支） */
+    @Column(nullable = false)
+    private int sharpItemCount = 0;
+
     /** 是否需要双人交接（含高风险袋或重量达阈值） */
     @Column(nullable = false)
     private boolean requiresDual = false;

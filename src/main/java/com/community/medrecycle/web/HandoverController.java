@@ -23,15 +23,16 @@ public class HandoverController {
     private final HandoverService handoverService;
 
     public record CreateRequest(@NotNull Long siteId, @NotBlank String companyName,
-                                @NotBlank String destination, List<String> bagNos, boolean force) {
+                                @NotBlank String destination, List<String> bagNos,
+                                List<String> containerNos, boolean force) {
     }
 
-    /** 管理员发起环保交接（默认取站点全部暂存袋，校验上门量） */
+    /** 管理员发起环保交接（默认取站点全部暂存袋与已封箱锐器盒，校验上门量） */
     @PostMapping
     public HandoverOrder create(@Validated @RequestBody CreateRequest request) {
         AuthContext.requireRole(Role.ADMIN);
         return handoverService.create(request.siteId(), request.companyName(),
-                request.destination(), request.bagNos(), request.force());
+                request.destination(), request.bagNos(), request.containerNos(), request.force());
     }
 
     /** 交出方签收（双人交接时需两人各签一次） */
@@ -41,21 +42,29 @@ public class HandoverController {
         return handoverService.sign(operator.getId(), orderNo);
     }
 
-    public record ItemResultRequest(@NotBlank String bagNo, boolean accepted, String rejectReason) {
+    /**
+     * 逐袋/逐盒签收结果：
+     * bagNo 为普通袋袋号或锐器盒特殊交接标签号(SHL)；
+     * 锐器盒可传 receivedItems/receivedWeightKg 按数量与重量确认，packageDamaged=true 表示包装破损。
+     */
+    public record ItemResultRequest(@NotBlank String bagNo, boolean accepted, String rejectReason,
+                                    Integer receivedItems, Double receivedWeightKg,
+                                    boolean packageDamaged, String damageNote) {
     }
 
     public record CompleteRequest(@NotBlank String receiverName, String photoUrls,
                                   @Valid List<ItemResultRequest> items) {
     }
 
-    /** 环保公司签收完成：逐袋确认，拒收自动生成异常 */
+    /** 环保公司签收完成：普通袋逐袋确认、锐器盒按数量重量确认，拒收/破损自动生成异常 */
     @PostMapping("/{orderNo}/complete")
     public HandoverOrder complete(@PathVariable String orderNo,
                                   @Validated @RequestBody CompleteRequest request) {
         AuthContext.requireRole(Role.RECYCLER, Role.ADMIN);
         List<HandoverService.ItemResult> items = request.items() == null ? List.of()
                 : request.items().stream()
-                .map(i -> new HandoverService.ItemResult(i.bagNo(), i.accepted(), i.rejectReason()))
+                .map(i -> new HandoverService.ItemResult(i.bagNo(), i.accepted(), i.rejectReason(),
+                        i.receivedItems(), i.receivedWeightKg(), i.packageDamaged(), i.damageNote()))
                 .toList();
         return handoverService.complete(orderNo, request.receiverName(), request.photoUrls(), items);
     }

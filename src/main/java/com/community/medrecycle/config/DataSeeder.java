@@ -21,6 +21,7 @@ public class DataSeeder implements ApplicationRunner {
     private final AccountRepository accountRepository;
     private final CommunitySiteRepository siteRepository;
     private final StorageCabinetRepository cabinetRepository;
+    private final SharpContainerRepository sharpContainerRepository;
     private final PointsRuleRepository pointsRuleRepository;
     private final GiftRepository giftRepository;
     private final ActivityDayRepository activityDayRepository;
@@ -36,14 +37,18 @@ public class DataSeeder implements ApplicationRunner {
             return;
         }
 
-        // 社区回收点
-        CommunitySite site1 = site("阳光社区回收点", "阳光路 12 号社区服务中心", 0.8, 50, 30, 20);
-        CommunitySite site2 = site("河畔社区回收点", "滨河大道 3 号", 0.8, 40, 30, 15);
+        // 社区回收点（最后一个参数为锐器盒容量预警比例）
+        CommunitySite site1 = site("阳光社区回收点", "阳光路 12 号社区服务中心", 0.8, 50, 30, 20, 0.8);
+        CommunitySite site2 = site("河畔社区回收点", "滨河大道 3 号", 0.8, 40, 30, 15, 0.8);
 
         // 暂存柜
         cabinet(site1.getId(), "阳光-A 综合柜", 100, 80);
         cabinet(site1.getId(), "阳光-B 高危专柜", 40, 30);
         cabinet(site2.getId(), "河畔-A 综合柜", 60, 50);
+
+        // 锐器盒（针剂专用防刺容器，不进普通暂存柜）
+        sharpContainer(site1.getId(), "阳光-锐器盒1号", 200, 20);
+        sharpContainer(site2.getId(), "河畔-锐器盒1号", 100, 10);
 
         // 积分规则（每公斤积分；精神类/注射器为高风险需人工复核）
         rule(DrugCategory.TABLET, 10, false, "普通片剂/胶囊");
@@ -82,7 +87,7 @@ public class DataSeeder implements ApplicationRunner {
     }
 
     private CommunitySite site(String name, String address, double warnRatio, double pickupThresholdKg,
-                               int overdueDays, double dualWeightThresholdKg) {
+                               int overdueDays, double dualWeightThresholdKg, double sharpWarnRatio) {
         CommunitySite site = new CommunitySite();
         site.setName(name);
         site.setAddress(address);
@@ -90,7 +95,18 @@ public class DataSeeder implements ApplicationRunner {
         site.setPickupThresholdKg(pickupThresholdKg);
         site.setOverdueDays(overdueDays);
         site.setDualWeightThresholdKg(dualWeightThresholdKg);
+        site.setSharpWarnRatio(sharpWarnRatio);
         return siteRepository.save(site);
+    }
+
+    private void sharpContainer(Long siteId, String name, int capacityItems, double capacityWeightKg) {
+        SharpContainer container = new SharpContainer();
+        container.setContainerNo(NoGen.next("SC"));
+        container.setSiteId(siteId);
+        container.setName(name);
+        container.setCapacityItems(capacityItems);
+        container.setCapacityWeightKg(capacityWeightKg);
+        sharpContainerRepository.save(container);
     }
 
     private void cabinet(Long siteId, String name, int capacityBags, double capacityWeightKg) {

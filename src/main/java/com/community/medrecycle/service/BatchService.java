@@ -28,6 +28,8 @@ public class BatchService {
     private final HandoverOrderRepository handoverOrderRepository;
     private final ExceptionRecordRepository exceptionRecordRepository;
     private final PointsTransactionRepository pointsTransactionRepository;
+    private final SharpDepositRepository sharpDepositRepository;
+    private final SharpContainerRepository sharpContainerRepository;
     private final PointsRuleService pointsRuleService;
     private final PointsService pointsService;
     private final BatchRefresher batchRefresher;
@@ -66,7 +68,15 @@ public class BatchService {
     }
 
     public record WeighItem(DrugCategory category, double weightKg, String sealNo,
-                            String photoUrls, boolean dispute) {
+                            String photoUrls, boolean dispute,
+                            boolean punctureProofContainer, boolean mixedWithRegularBag,
+                            int sharpItemCount) {
+
+        /** 非针剂品类的便捷构造（兼容既有调用与测试） */
+        public WeighItem(DrugCategory category, double weightKg, String sealNo,
+                         String photoUrls, boolean dispute) {
+            this(category, weightKg, sealNo, photoUrls, dispute, false, false, 0);
+        }
     }
 
     /** 现场分类称重封袋：生成称重记录与封袋，高风险品类自动进入人工复核 */
@@ -90,6 +100,16 @@ public class BatchService {
             if (item.weightKg() <= 0) {
                 throw BizException.badRequest("称重必须大于 0");
             }
+            boolean isSyringe = item.category() == DrugCategory.SYRINGE;
+            // 针剂安全封装复核：胰岛素针头/注射器必须确认数量与现场照片
+            if (isSyringe) {
+                if (item.sharpItemCount() <= 0) {
+                    throw BizException.badRequest("针剂称重必须登记锐器数量（支）");
+                }
+                if (item.photoUrls() == null || item.photoUrls().isBlank()) {
+                    throw BizException.badRequest("针剂称重必须提供封装与称重照片");
+                }
+            }
 
             WeighRecord record = new WeighRecord();
             record.setBatchId(batch.getId());
@@ -97,6 +117,9 @@ public class BatchService {
             record.setWeightKg(item.weightKg());
             record.setPhotoUrls(item.photoUrls());
             record.setDispute(item.dispute());
+            record.setPunctureProofContainer(item.punctureProofContainer());
+            record.setMixedWithRegularBag(item.mixedWithRegularBag());
+            record.setSharpItemCount(item.sharpItemCount());
             record.setWeighedBy(operatorId);
             weighRecordRepository.save(record);
 
@@ -122,11 +145,26 @@ public class BatchService {
                 // 高风险药品：先人工复核，复核通过才发积分
                 bag.setStatus(BagStatus.PENDING_REVIEW);
                 bagRepository.save(bag);
+                record.setBagId(bag.getId());
+                weighRecordRepository.save(record);
                 createReviewTask(batch, bag, "HIGH_RISK_CATEGORY");
             } else {
                 bag.setStatus(BagStatus.ACCEPTED);
                 bagRepository.save(bag);
+                record.setBagId(bag.getId());
+                weighRecordRepository.save(record);
                 grantBagPoints(batch, bag);
+            }
+
+            // 针剂安全封装复核：现场确认未使用防刺容器或混入普通药袋，立即生成针剂未封装异常
+            // 未封装针剂不能进入普通暂存柜（高风险袋已在复核队列，复核通过后仍须转入锐器盒）
+            if (isSyringe && (!item.punctureProofContainer() || item.mixedWithRegularBag())) {
+                raiseAutoException(batch, bag, ExceptionType.UNSAFE_INJECTION,
+                        "针剂安全封装复核未通过："
+                                + (!item.punctureProofContainer() ? "未使用防刺容器；" : "")
+                                + (item.mixedWithRegularBag() ? "混入普通药袋；" : "")
+                                + "数量 " + item.sharpItemCount()
+                                + " 支，重量 " + item.weightKg() + "kg。须现场重新规范封装后转入锐器盒");
             }
 
             if (item.dispute()) {
@@ -218,6 +256,11 @@ public class BatchService {
             }
             view.put("handovers", handovers);
             view.put("pointsTransactions", pointsTransactionRepository.findByRefTypeAndRefId("BAG", bag.getBagNo()));
+            sharpDepositRepository.findByBagId(bag.getId()).ifPresent(deposit -> {
+                view.put("sharpDeposit", deposit);
+                sharpContainerRepository.findById(deposit.getContainerId())
+                        .ifPresent(c -> view.put("sharpContainer", c));
+            });
             bagViews.add(view);
         }
 
@@ -227,6 +270,11 @@ public class BatchService {
         trace.put("weighRecords", weighRecordRepository.findByBatchIdOrderByCreatedAtAsc(batch.getId()));
         trace.put("bags", bagViews);
         trace.put("exceptions", exceptionRecordRepository.findByBatchId(batch.getId()));
+        List<SharpDeposit> sharpDeposits = sharpDepositRepository.findByBatchId(batch.getId());
+        trace.put("sharpDeposits", sharpDeposits);
+        trace.put("sharpContainers", sharpDeposits.stream()
+                .map(d -> sharpContainerRepository.findById(d.getContainerId()).orElse(null))
+                .filter(Objects::nonNull).distinct().toList());
         return trace;
     }
 }

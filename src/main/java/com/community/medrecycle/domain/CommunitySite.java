@@ -36,4 +36,8 @@ public class CommunitySite {
     /** 单批交接重量达到该值（kg）时强制双人交接 */
     @Column(nullable = false)
     private double dualWeightThresholdKg = 20;
+
+    /** 锐器盒容量预警比例，使用率达到该值提前通知环保公司或上级回收点 */
+    @Column(nullable = false)
+    private double sharpWarnRatio = 0.8;
 }

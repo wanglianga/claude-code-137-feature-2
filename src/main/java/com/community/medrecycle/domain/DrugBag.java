@@ -63,6 +63,9 @@ public class DrugBag {
     @Column(nullable = false, length = 24)
     private BagStatus status = BagStatus.ACCEPTED;
 
+    /** 针剂转入锐器盒后记录所在锐器盒；普通袋为空 */
+    private Long sharpContainerId;
+
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }

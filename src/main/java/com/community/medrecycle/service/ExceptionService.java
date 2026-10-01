@@ -9,6 +9,7 @@ import com.community.medrecycle.domain.enums.ExceptionType;
 import com.community.medrecycle.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -114,6 +115,81 @@ public class ExceptionService {
         record.setBagId(bag.getId());
         record.setBagNo(bag.getBagNo());
         return exceptionRepository.save(record);
+    }
+
+    /** 环保公司整盒拒收锐器盒（非包装破损） */
+    @Transactional
+    public ExceptionRecord recordContainerReject(com.community.medrecycle.domain.SharpContainer container,
+                                                 String reason) {
+        ExceptionRecord record = new ExceptionRecord();
+        record.setExceptionNo(NoGen.next("EX"));
+        record.setType(ExceptionType.COMPANY_REJECT);
+        record.setSharpContainerId(container.getId());
+        record.setSharpContainerNo(container.getContainerNo());
+        record.setDescription("环保公司整盒拒收锐器盒 " + container.getContainerNo()
+                + "（特殊交接标签 " + container.getHandoffLabelNo() + "），原因: "
+                + (reason == null || reason.isBlank() ? "未说明" : reason) + "，锐器盒退回回收点待重新交接");
+        return exceptionRepository.save(record);
+    }
+
+    /** 锐器盒包装破损事故（随交接事务提交）：回收点补充事故记录，随后停用锐器盒并重新封装 */
+    @Transactional
+    public ExceptionRecord recordPackageDamage(com.community.medrecycle.domain.SharpContainer container,
+                                               Long orderId, String note) {
+        ExceptionRecord record = new ExceptionRecord();
+        record.setExceptionNo(NoGen.next("EX"));
+        record.setType(ExceptionType.PACKAGE_DAMAGED);
+        record.setSharpContainerId(container.getId());
+        record.setSharpContainerNo(container.getContainerNo());
+        record.setDescription("环保公司签收时发现锐器盒包装破损（盒号 " + container.getContainerNo()
+                + "，特殊交接标签 " + container.getHandoffLabelNo() + "）："
+                + (note == null || note.isBlank() ? "未说明" : note)
+                + "。回收点已补充事故记录并重新封装，该盒停用，针剂退回重新转入新锐器盒。"
+                + (orderId != null ? " 关联交接单ID " + orderId + "。" : ""));
+        return exceptionRepository.save(record);
+    }
+
+    /**
+     * 针剂安全封装复核未通过（独立事务）：
+     * 留存 UNSAFE_INJECTION 异常并把针剂袋退回人工复核，即使外层投放事务回滚，事故记录也保留。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ExceptionRecord handleUnsafeInjection(Long bagId, int itemCount, double weightKg,
+                                                 boolean punctureProof, boolean mixedBag) {
+        DrugBag bag = bagRepository.findById(bagId).orElseThrow();
+        RecycleBatch batch = batchRepository.findById(bag.getBatchId()).orElseThrow();
+
+        ExceptionRecord record = new ExceptionRecord();
+        record.setExceptionNo(NoGen.next("EX"));
+        record.setBatchId(batch.getId());
+        record.setBatchNo(batch.getBatchNo());
+        record.setBagId(bag.getId());
+        record.setBagNo(bag.getBagNo());
+        record.setType(ExceptionType.UNSAFE_INJECTION);
+        record.setDescription("针剂安全封装复核未通过："
+                + (!punctureProof ? "回收员确认居民未使用防刺容器；" : "")
+                + (mixedBag ? "针剂混入普通药袋；" : "")
+                + "数量 " + itemCount + " 支，重量 " + weightKg
+                + "kg。未封装针剂禁止进入普通暂存柜，须重新规范封装并复核后转入锐器盒");
+        exceptionRepository.save(record);
+
+        if (bag.getStatus() != BagStatus.REVIEW_REJECTED) {
+            bag.setStatus(BagStatus.PENDING_REVIEW);
+            bag.setSharpContainerId(null);
+            bagRepository.save(bag);
+            boolean exists = reviewTaskRepository.findByBagIdAndStatus(bag.getId(),
+                    com.community.medrecycle.domain.enums.ReviewStatus.PENDING).stream().findAny().isPresent();
+            if (!exists) {
+                ReviewTask task = new ReviewTask();
+                task.setTaskNo(NoGen.next("RT"));
+                task.setBatchId(batch.getId());
+                task.setBagId(bag.getId());
+                task.setBagNo(bag.getBagNo());
+                task.setReason(ExceptionType.UNSAFE_INJECTION.name());
+                reviewTaskRepository.save(task);
+            }
+        }
+        return record;
     }
 
     @Transactional

@@ -33,6 +33,12 @@ public class ExceptionRecord {
     @Column(length = 32)
     private String bagNo;
 
+    /** 锐器盒包装破损事故关联的锐器盒 */
+    private Long sharpContainerId;
+
+    @Column(length = 32)
+    private String sharpContainerNo;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private ExceptionType type;
